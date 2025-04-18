@@ -1,0 +1,15 @@
+﻿Generic Name,Brand Name 1,Brand Name 2,Brand Name 3,Brand Name 4,Uses,Side Effects (common),Side Effects (rare),Similar Drugs
+Gemifloxacin,Factive,,,,"Acute bacterial exacerbation of chronic bronchitis, CAP","Diarrhea, rash","QT prolongation, tendon rupture","Levofloxacin, Moxifloxacin"
+Gentamicin,Garamycin,,,,Severe gram-negative infections,"Nephrotoxicity, ototoxicity","Neuromuscular blockade, vestibular dysfunction","Tobramycin, Amikacin"
+Gimeracil,(part of Teysuno),,,,Enhances 5-FU by inhibiting degradation (combo with tegafur),"Diarrhea, neutropenia","Mucositis, elevated liver enzymes",Leucovorin (similar enhancer role)
+Glatiramer acetate,Copaxone,Glatopa,,,Relapsing multiple sclerosis,"Injection site reaction, flushing","Lipoatrophy, chest pain",Interferon beta-1a
+Glecaprevir/pibrentasvir,Mavyret,,,,Chronic HCV infection (pan-genotypic),"Headache, fatigue",Hepatic decompensation (rare),Sofosbuvir/Velpatasvir
+Gliclazide,Diamicron,,,,Type 2 diabetes (not approved in U.S.),"Hypoglycemia, weight gain","Agranulocytosis, liver dysfunction","Glipizide, Glyburide"
+Glimepiride,Amaryl,,,,Type 2 diabetes,"Hypoglycemia, dizziness","Cholestatic jaundice, hematologic reactions","Glipizide, Gliclazide"
+Glipizide,Glucotrol,,,,Type 2 diabetes,"Hypoglycemia, GI upset","Thrombocytopenia, allergic skin reactions","Glyburide, Glimepiride"
+Glyburide,Diabeta,Micronase,Glynase,,Type 2 diabetes,"Hypoglycemia, nausea","SIADH, hemolytic anemia (in G6PD deficiency)","Glipizide, Glimepiride"
+Glycerin,Osmoglyn,Pedia-Lax,Sani-Supp,,Constipation (suppository); osmotic laxative,Rectal irritation,Electrolyte imbalance (chronic use),"Lactulose, Sorbitol"
+Glycopyrrolate,Robinul,Cuvposa,,,"Drooling, peptic ulcers, IBS (anticholinergic)","Dry mouth, constipation","Urinary retention, blurred vision","Hyoscyamine, Atropine"
+Golimumab,Simponi,,,,"Rheumatoid arthritis, UC, psoriatic arthritis","Injection site reaction, upper respiratory infections","Serious infections, TB reactivation","Adalimumab, Etanercept"
+Gonadorelin,Factrel,,,,Diagnostic use for LH/FSH secretion; hypothalamic amenorrhea,"Headache, hot flashes","Ovarian cysts, hypersensitivity","Leuprolide, Nafarelin"
+Goserelin,Zoladex,,,,"Prostate & breast cancer, endometriosis","Hot flashes, decreased libido","Tumor flare, bone thinning","Leuprolide, Triptorelin"

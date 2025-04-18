@@ -1,0 +1,33 @@
+# Core dependencies
+gradio>=4.19.2
+langchain>=0.1.9
+langchain-core>=0.1.27
+langchain-openai>=0.0.8
+langchain-community>=0.0.24
+langchain-chroma>=0.0.3
+langchain-google-genai
+
+# Database and data handling
+sqlalchemy>=2.0.27
+pandas>=2.2.1
+pyodbc>=5.0.1
+
+# OpenAI and embeddings
+openai>=1.12.0
+tiktoken>=0.6.0
+
+# Environment and utilities
+python-dotenv>=1.0.1
+chromadb>=0.4.22
+numpy>=1.26.4
+
+# Development tools
+pytest>=8.0.2
+black>=24.2.0
+flake8>=7.0.0
+
+# Additional dependencies
+langchain-text-splitters
+pydantic
+folium
+reportlab==3.6.12 

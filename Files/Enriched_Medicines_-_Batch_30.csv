@@ -1,0 +1,16 @@
+﻿Generic Name,Brand Name 1,Brand Name 2,Brand Name 3,Brand Name 4,Uses,Side Effects (common),Side Effects (rare),Similar Drugs
+Granisetron,Kytril,Sancuso,,,Chemotherapy/radiation-induced nausea and vomiting,"Headache, constipation","QT prolongation, serotonin syndrome","Ondansetron, Palonosetron"
+Griseofulvin,Gris-PEG,Grifulvin V,,,"Dermatophytosis (skin, hair, nails)","Headache, GI upset","Hepatotoxicity, photosensitivity","Terbinafine, Itraconazole"
+Guanfacine,Intuniv,Tenex,,,"ADHD (Intuniv), hypertension (Tenex)","Drowsiness, dry mouth","Bradycardia, hypotension","Clonidine, Atomoxetine"
+Guanidine,—,,,,Rarely used: myasthenic syndrome (Lambert-Eaton); investigational,"GI upset, dizziness","Leukopenia, blood dyscrasias",Pyridostigmine
+Halcinonide,Halog,,,,High-potency topical corticosteroid for inflammatory skin conditions,"Burning, itching","Skin thinning, adrenal suppression","Fluocinonide, Clobetasol"
+Halobetasol,Ultravate,Bryhali,,,Very high-potency topical corticosteroid,"Burning, stinging","HPA axis suppression, skin atrophy","Clobetasol, Betamethasone"
+Halofantrine,Halfan,,,,Malaria (rare use; resistance & toxicity concerns),"GI upset, headache","QT prolongation, cardiotoxicity","Artemether-lumefantrine, Quinine"
+Haloperidol,Haldol,,,,"Schizophrenia, acute agitation, delirium","Extrapyramidal symptoms, drowsiness","Tardive dyskinesia, neuroleptic malignant syndrome","Risperidone, Fluphenazine"
+Halothane,Fluothane,,,,General anesthesia (no longer commonly used),"Hypotension, bradycardia","Hepatitis (halothane hepatitis), arrhythmia","Isoflurane, Sevoflurane"
+Heparin,—,,,,"Anticoagulation for DVT/PE, ACS, dialysis","Bleeding, thrombocytopenia","HIT (heparin-induced thrombocytopenia), osteoporosis","Enoxaparin, Fondaparinux"
+Hydralazine,Apresoline,,,,"Hypertension, heart failure (especially in Black patients when combined)","Headache, flushing","Drug-induced lupus, tachycardia","Minoxidil, Isosorbide dinitrate"
+Hydrochlorothiazide,Microzide,Hydrodiuril,,,"Hypertension, edema","Hypokalemia, dizziness","Hyperuricemia, hyperglycemia","Chlorthalidone, Indapamide"
+Hydrocodone,Vicodin,Norco,Lortab,,Moderate to severe pain (usually combined with acetaminophen),"Constipation, sedation","Respiratory depression, dependence","Oxycodone, Codeine"
+Hydrocortisone,Cortef,Solu-Cortef,Anusol HC,,"Adrenal insufficiency, inflammation, dermatologic and GI conditions","Mood changes, hyperglycemia","Adrenal suppression, osteoporosis","Prednisone, Methylprednisolone"
+Hydromorphone,Dilaudid,Exalgo,,,Moderate to severe pain,"Sedation, nausea","Respiratory depression, tolerance/dependence","Morphine, Fentanyl"

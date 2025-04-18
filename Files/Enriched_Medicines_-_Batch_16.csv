@@ -1,0 +1,16 @@
+﻿Generic Name,Brand Name 1,Brand Name 2,Brand Name 3,Brand Name 4,Uses,Side Effects (common),Side Effects (rare),Similar Drugs
+Colchicine,Colcrys,Mitigare,,,"Gout flares, familial Mediterranean fever","Diarrhea, nausea","Myelosuppression, neuromyopathy","Allopurinol, NSAIDs"
+Colesevelam,Welchol,,,,"Hyperlipidemia, type 2 diabetes adjunct","Constipation, dyspepsia","Vitamin deficiencies (fat-soluble), hypertriglyceridemia","Cholestyramine, Colestipol"
+Colestipol,Colestid,,,,Hyperlipidemia,"Constipation, bloating","Vitamin A, D, E, K deficiency","Cholestyramine, Colesevelam"
+Colistin,Coly-Mycin M,,,,Multidrug-resistant gram-negative bacterial infections,"Nephrotoxicity, paresthesia","Neuromuscular blockade, apnea","Polymyxin B, Tigecycline"
+Colistimethate,–,,,,Prodrug of colistin; IV use for severe infections,"Nephrotoxicity, bronchospasm (inhaled)","Respiratory failure, renal damage","Polymyxin B, Amikacin"
+Conivaptan,Vaprisol,,,,Hyponatremia (euvolemic or hypervolemic),"Infusion site reactions, thirst","Hypotension, osmotic demyelination syndrome",Tolvaptan
+Corticotropin,Acthar,,,,"Infantile spasms, MS exacerbations, nephrotic syndrome","Irritability, weight gain","Hypertension, infection risk","Prednisone, Methylprednisolone"
+Cortisone,Cortone,,,,Inflammatory and autoimmune conditions,"Fluid retention, increased appetite","Cushing's syndrome, adrenal suppression","Prednisone, Hydrocortisone"
+Cosyntropin,Cortrosyn,,,,Diagnostic agent for adrenal insufficiency (ACTH stimulation test),"Injection site reaction, rash",Anaphylaxis (rare),"ACTH, Hydrocortisone"
+Crizotinib,Xalkori,,,,ALK-positive and ROS1-positive non-small cell lung cancer,"Vision disorders, diarrhea, nausea","Hepatotoxicity, QT prolongation","Ceritinib, Alectinib"
+Cromolyn,Gastrocrom,Crolom,NasalCrom,,"Mast cell stabilizer: asthma, allergic rhinitis, mastocytosis","Cough, nasal irritation, eye stinging","Paradoxical bronchospasm, hypersensitivity","Nedocromil, Ketotifen"
+Cyclizine,Marezine,,,,"Motion sickness, vertigo","Drowsiness, dry mouth","Tachycardia, blurred vision","Meclizine, Dimenhydrinate"
+Cyclobenzaprine,Flexeril,Amrix,Fexmid,,Muscle spasm relief,"Drowsiness, dry mouth","Serotonin syndrome, arrhythmias","Tizanidine, Methocarbamol"
+Cyclophosphamide,Cytoxan,Neosar,,,"Cancers (lymphoma, breast) and autoimmune diseases","Nausea, alopecia, myelosuppression","Hemorrhagic cystitis, infertility","Ifosfamide, Methotrexate"
+Cyclosporine,Neoral,Sandimmune,Restasis,Gengraf,"Organ transplantation, autoimmune diseases (e.g., RA, psoriasis)","Hypertension, gingival hyperplasia","Nephrotoxicity, infection risk","Tacrolimus, Mycophenolate"
