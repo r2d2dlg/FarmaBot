@@ -39,3 +39,6 @@ orders_*.json
 # Other
 .DS_Store
 Thumbs.db
+Medicines/chroma.sqlite3
+medicines_vectordb/chroma.sqlite3
+*.sqlite3
