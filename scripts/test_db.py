@@ -18,7 +18,8 @@ if not conn_str:
     exit(1)
 
 # Initialize database service
-db = DatabaseService(conn_str)
+db_path = conn_str.replace("sqlite:///", "")
+db = DatabaseService(db_path=db_path)
 
 # Fetch and display store info
 stores = db.get_store_info()

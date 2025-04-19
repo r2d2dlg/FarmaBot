@@ -53,7 +53,9 @@ def main():
     try:
         # Initialize services
         logger.info("Initializing services...")
-        db_service = DatabaseService(connection_string=db_connection_string)
+        # Extract db_path from connection string for SQLite
+        db_path = db_connection_string.replace("sqlite:///", "")
+        db_service = DatabaseService(db_path=db_path)
         medicine_service = MedicineService(db_service)
         store_service = StoreService(db_service)
         

@@ -1,14 +1,13 @@
 # Core dependencies
 gradio>=4.19.2
 langchain>=0.1.9
-langchain-core>=0.1.27
-langchain-openai>=0.0.8
-langchain-community>=0.0.24
-langchain-chroma>=0.0.3
-langchain-google-genai
+langchain-core>=0.1.23
+langchain-openai>=0.0.5
+langchain-community>=0.0.19
+langchain-chroma>=0.0.1
+langchain-google-genai>=0.0.6
 
 # Database and data handling
-sqlalchemy>=2.0.27
 pandas>=2.2.1
 pyodbc>=5.0.1
 
@@ -17,7 +16,7 @@ openai>=1.12.0
 tiktoken>=0.6.0
 
 # Environment and utilities
-python-dotenv>=1.0.1
+python-dotenv>=1.0.0
 chromadb>=0.4.22
 numpy>=1.26.4
 
@@ -27,7 +26,5 @@ black>=24.2.0
 flake8>=7.0.0
 
 # Additional dependencies
-langchain-text-splitters
-pydantic
-folium
-reportlab==3.6.12 
+reportlab>=4.1.0
+google-generativeai>=0.3.2 
