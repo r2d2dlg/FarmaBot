@@ -21,6 +21,9 @@ orders_*.json
 # Database files
 *.db
 *.sqlite3
+chroma.sqlite3
+Medicines/*.sqlite3
+medicines_vectordb/*.sqlite3
 
 # Environment variables
 .env
