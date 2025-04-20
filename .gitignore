@@ -24,6 +24,13 @@ orders_*.json
 chroma.sqlite3
 Medicines/*.sqlite3
 medicines_vectordb/*.sqlite3
+chroma_db_medicines/*.sqlite3
+**/chroma.sqlite3
+
+# Large data directories
+Medicines/
+medicines_vectordb/
+chroma_db_medicines/
 
 # Environment variables
 .env
