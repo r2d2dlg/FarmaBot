@@ -3,155 +3,113 @@ Database service for FarmaBot - Handles database connections and operations.
 """
 
 import logging
-import sqlite3
-from typing import Optional, List, Dict, Any, Union
-import threading
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+from typing import Optional, List, Dict, Any
+from sqlalchemy import create_engine, text
+from langchain_community.utilities.sql_database import SQLDatabase
+from langchain.agents import AgentType, create_sql_agent
+from langchain_community.tools.sql_database.tool import QuerySQLDatabaseTool
+from langchain_openai import ChatOpenAI
 
 class DatabaseService:
-    def __init__(self, db_path: str):
-        """Initialize the database service with a SQLite database path."""
-        self.db_path = db_path
-        self._local = threading.local()
-        logger.info(f"Connected to SQLite database: {db_path}")
-    
-    @property
-    def conn(self) -> sqlite3.Connection:
-        """Get a thread-local database connection."""
-        if not hasattr(self._local, 'conn'):
-            self._local.conn = sqlite3.connect(self.db_path)
-        return self._local.conn
-    
-    def execute_query(self, query: str, params: tuple = None) -> Optional[List[tuple]]:
+    def __init__(self, connection_string: str, model: str = "gpt-4-turbo"):
+        """Initialize the database service."""
+        if not connection_string:
+            raise ValueError("Database connection string is required.")
+        self.connection_string = connection_string
+        self.model = model
+        self.logger = logging.getLogger(__name__)
+        
+        # Initialize components
+        self.setup_database()
+        self.setup_sql_agent()
+        
+    def setup_database(self):
+        """Set up the database connection."""
+        try:
+            self.engine = create_engine(self.connection_string)
+            self.db = SQLDatabase.from_uri(self.connection_string)
+            # Extract database name for logging if possible, otherwise log generic message
+            try:
+                db_name = self.engine.url.database
+                self.logger.info(f"Connected to database: {db_name}")
+            except Exception:
+                self.logger.info("Connected to database using provided connection string.")
+        except Exception as e:
+            self.logger.error(f"Error connecting to database: {e}")
+            raise
+            
+    def setup_sql_agent(self):
+        """Set up the SQL agent for natural language queries."""
+        try:
+            llm = ChatOpenAI(model=self.model)
+            tools = [QuerySQLDatabaseTool(db=self.db)]
+            self.sql_agent = create_sql_agent(
+                llm=llm,
+                db=self.db,
+                agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+                verbose=True
+            )
+            self.logger.info("SQL agent initialized successfully")
+        except Exception as e:
+            self.logger.error(f"Error setting up SQL agent: {e}")
+            raise
+            
+    def execute_query(self, query: str, params: Optional[List[Any]] = None) -> List[Dict[str, Any]]:
         """Execute a SQL query and return the results."""
         try:
-            cursor = self.conn.cursor()
-            if params:
-                cursor.execute(query, params)
-            else:
-                cursor.execute(query)
-            
-            # For SELECT queries
-            if query.strip().upper().startswith('SELECT'):
-                return cursor.fetchall()
-            
-            # For INSERT/UPDATE/DELETE queries
-            self.conn.commit()
-            return None
-            
+            self.logger.debug(f"Executing SQL query: {query}")
+            with self.engine.connect() as connection:
+                result = connection.execute(text(query), params if params else {})
+                rows = [row._asdict() for row in result]
+                self.logger.debug(f"Query returned {len(rows)} rows.")
+                return rows
         except Exception as e:
-            logger.error(f"Database error during query execution: {e}", exc_info=True)
-            if 'cursor' in locals():
-                cursor.close()
-            return None
-    
-    def get_medicine_info(self, medicine_id: int = None, medicine_name: str = None) -> Optional[Dict[str, Any]]:
-        """Get medicine information by ID or name."""
+            self.logger.error(f"Error executing query: {e}")
+            raise
+            
+    def get_medicine_info(self, medicine_id: Optional[int] = None, 
+                         medicine_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get medicine information from the database."""
         try:
+            query = "SELECT * FROM [dbo].[Medicines]"
             if medicine_id:
-                query = """
-                    SELECT m.*, SUM(i.quantity) as total_stock
-                    FROM Medicines m
-                    LEFT JOIN Inventory i ON m.medicine_id = i.medicine_id
-                    WHERE m.medicine_id = ?
-                    GROUP BY m.medicine_id
-                """
-                params = (medicine_id,)
+                query += f" WHERE MedicineID = {medicine_id}"
             elif medicine_name:
-                query = """
-                    SELECT m.*, SUM(i.quantity) as total_stock
-                    FROM Medicines m
-                    LEFT JOIN Inventory i ON m.medicine_id = i.medicine_id
-                    WHERE LOWER(m.generic_name) LIKE LOWER(?)
-                    OR LOWER(m.brand_name1) LIKE LOWER(?)
-                    GROUP BY m.medicine_id
-                """
-                search_term = f"%{medicine_name}%"
-                params = (search_term, search_term)
-            else:
-                return None
-            
-            result = self.execute_query(query, params)
-            if not result:
-                return None
-            
-            # Convert to dictionary
-            columns = ['medicine_id', 'generic_name', 'brand_name1', 'brand_name2', 
-                      'brand_name3', 'brand_name4', 'brand_name5', 'brand_name6',
-                      'description', 'side_effects', 'requires_prescription', 'price', 'total_stock']
-            return dict(zip(columns, result[0]))
-            
+                query += f" WHERE Name LIKE '%{medicine_name}%'"
+                
+            return self.execute_query(query)
         except Exception as e:
-            logger.error(f"Error getting medicine info: {e}", exc_info=True)
-            return None
-    
-    def get_store_info(self, store_id: int = None, store_name: str = None) -> Optional[Dict[str, Any]]:
-        """Get store information by ID or name."""
-        try:
-            if store_id:
-                query = "SELECT * FROM Stores WHERE store_id = ?"
-                params = (store_id,)
-            elif store_name:
-                query = "SELECT * FROM Stores WHERE LOWER(name) LIKE LOWER(?)"
-                search_term = f"%{store_name}%"
-                params = (search_term,)
-            else:
-                return None
+            self.logger.error(f"Error getting medicine info: {e}")
+            raise
             
-            result = self.execute_query(query, params)
-            if not result:
-                return None
-            
-            # Convert to dictionary
-            columns = ['store_id', 'name', 'address', 'opening_hours', 'phone_number']
-            return dict(zip(columns, result[0]))
-            
-        except Exception as e:
-            logger.error(f"Error getting store info: {e}", exc_info=True)
-            return None
-    
-    def get_inventory(self, store_id: Optional[int] = None, medicine_id: Optional[int] = None) -> List[Dict[str, Any]]:
-        """Get inventory information, optionally filtered by store or medicine."""
+    def get_store_info(self, store_id: Optional[int] = None, 
+                      location: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get store information from the database."""
         try:
             query = """
-                SELECT s.name as store_name, m.generic_name, m.brand_name1, i.quantity
-                FROM Inventory i
-                JOIN Stores s ON i.store_id = s.store_id
-                JOIN Medicines m ON i.medicine_id = m.medicine_id
+                SELECT StoreID, StoreName, InventoryTableName, Location, Address
+                FROM dbo.Stores
                 WHERE 1=1
             """
             params = []
             
             if store_id:
-                query += " AND i.store_id = ?"
+                query += " AND StoreID = ?"
                 params.append(store_id)
-            if medicine_id:
-                query += " AND i.medicine_id = ?"
-                params.append(medicine_id)
-            
-            results = self.execute_query(query, tuple(params))
-            if not results:
-                return []
-            
-            # Convert to list of dictionaries
-            inventory_list = []
-            for row in results:
-                inventory_list.append({
-                    'store_name': row[0],
-                    'generic_name': row[1],
-                    'brand_name': row[2],
-                    'quantity': row[3]
-                })
-            return inventory_list
-            
+            if location:
+                query += " AND Location LIKE ?"
+                params.append(f"%{location}%")
+                
+            return self.execute_query(query, params)
         except Exception as e:
-            logger.error(f"Error getting inventory: {e}", exc_info=True)
+            self.logger.error(f"Error getting store info: {e}")
             return []
-    
-    def __del__(self):
-        """Close the database connection when the service is destroyed."""
-        if hasattr(self._local, 'conn'):
-            self._local.conn.close() 
+            
+    def process_natural_language_query(self, query: str) -> str:
+        """Process a natural language query using the SQL agent."""
+        try:
+            result = self.sql_agent.invoke({"input": query})
+            return result.get("output", "No results found.")
+        except Exception as e:
+            self.logger.error(f"Error processing natural language query: {e}")
+            raise 

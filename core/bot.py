@@ -8,6 +8,7 @@ import logging
 import os
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_chroma import Chroma
+from langchain.agents import create_sql_agent
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 import re
@@ -111,92 +112,6 @@ class FarmaBot:
                 elif context_type == 'post_order':
                     return self.process_post_order_choice(message, language)
             
-            # Check if we're in the medicine store selection context
-            if self.medicine_service.current_medicine_context:
-                med_context = self.medicine_service.current_medicine_context
-                
-                # Handle store selection
-                if med_context.get('type') == 'medicine_found' and not med_context.get('store'):
-                    # User is selecting a store
-                    return self.medicine_service.handle_store_selection(message, language)
-                
-                # Handle quantity selection (after store selection)
-                if med_context.get('type') == 'medicine_found' and med_context.get('store'):
-                    # User is selecting quantity
-                    try:
-                        quantity = int(message.strip())
-                        available = med_context['store']['quantity']
-                        
-                        if quantity <= 0:
-                            if language == 'es':
-                                return "Por favor, ingresa una cantidad válida mayor que cero."
-                            else:
-                                return "Please enter a valid quantity greater than zero."
-                                
-                        if quantity > available:
-                            if language == 'es':
-                                return f"Lo sentimos, solo tenemos {available} unidades disponibles."
-                            else:
-                                return f"Sorry, we only have {available} units available."
-                                
-                        # Successful order
-                        medicine = med_context.get('medicine')
-                        store = med_context.get('store')
-                        
-                        # Format success message
-                        if language == 'es':
-                            response = f"¡Pedido confirmado!\n\n"
-                            response += f"Medicamento: {medicine['GenericName']}\n"
-                            response += f"Cantidad: {quantity} unidades\n"
-                            response += f"Tienda: {store['name']}\n\n"
-                            response += "Tu pedido estará listo para recoger en la tienda seleccionada.\n"
-                            response += "¿Necesitas algo más? Puedes buscar otro medicamento o escribir 'gracias' para finalizar."
-                        else:
-                            response = f"Order confirmed!\n\n"
-                            response += f"Medicine: {medicine['GenericName']}\n"
-                            response += f"Quantity: {quantity} units\n"
-                            response += f"Store: {store['name']}\n\n"
-                            response += "Your order will be ready for pickup at the selected store.\n"
-                            response += "Do you need anything else? You can search for another medicine or type 'thanks' to finish."
-                            
-                        # Clear medicine context
-                        self.medicine_service.current_medicine_context = None
-                        self.medicine_service.available_stores = []
-                        
-                        return response
-                    except ValueError:
-                        if language == 'es':
-                            return "Por favor, ingresa un número válido."
-                        else:
-                            return "Please enter a valid number."
-                
-                # Handle medicine selection from list
-                if med_context.get('type') == 'medicine_selection':
-                    # Try to convert to a number
-                    try:
-                        selection = int(message.strip())
-                        
-                        if 1 <= selection <= len(med_context.get('medicines', [])):
-                            # Valid selection
-                            selected_medicine = med_context['medicines'][selection - 1]
-                            
-                            # Update context
-                            self.medicine_service.current_medicine_context = {
-                                'type': 'medicine_found',
-                                'medicine': selected_medicine
-                            }
-                            
-                            # Return formatted medicine info
-                            return self.medicine_service._format_medicine_response(selected_medicine)
-                        else:
-                            if language == 'es':
-                                return "Selección inválida. Por favor, elige un número de la lista."
-                            else:
-                                return "Invalid selection. Please choose a number from the list."
-                    except ValueError:
-                        # Not a number, continue with regular message processing
-                        pass
-            
             # Check for checkout command when there are existing orders
             checkout_terms = ['checkout', 'check out', 'finalizar', 'terminar', 'pagar']
             if any(term in text_lower for term in checkout_terms) and self.current_context and self.current_context.get('orders'):
@@ -245,63 +160,216 @@ class FarmaBot:
                      "I'm sorry, I had trouble processing your message. Please try rephrasing your question or ask about a different medicine.")
             
     def process_medicine_query(self, query: str, language: str) -> str:
-        """Process a medicine-related query."""
+        """Process queries related to medicines."""
         try:
-            self.logger.info(f"Processing medicine query: {query}")
-            
-            # Clean and normalize the query
-            query = query.strip().lower()
-            
-            # Check for symptoms
-            if any(word in query for word in ['síntomas', 'sintomas', 'symptoms']):
-                return self._get_disclaimer_message(language)
-            
-            # Process the query using the medicine service
-            response = self.medicine_service.search_medicines(query, language)
-            
-            if response:
-                return response
+            # Clean query: strip Spanish question prefixes to isolate medicine name
+            q = query.strip()
+            # Remove leading verbs like 'tienen', 'tiene', 'hay', 'tengo' (Spanish)
+            if language == 'es':
+                q = re.sub(r'(?i)^(tienen|tiene|hay|tengo|busco)\s+', '', q)
             else:
-                return self._get_not_found_message(language)
+                q = re.sub(r'(?i)^(have|has|looking for)\s+', '', q)
+            # Strip punctuation
+            q = q.rstrip('?.! ')
+            
+            # Map brand names to generic names (based on inventory table)
+            brand_to_generic = {
+                'tylenol': 'Paracetamol',
+                'panadol': 'Paracetamol',
+                'aspirin': 'Acetylsalicylic Acid',
+                'ibuprofeno': 'Ibuprofen',
+                'vicodin': 'Hydrocodone',
+                'ritalin': 'Methylphenidate',
+                'ritalina': 'Methylphenidate',
+                'concerta': 'Methylphenidate',
+                'adderall': 'Amphetamine',
+                'xanax': 'Alprazolam',
+                'klonopin': 'Clonazepam',
+                'valium': 'Diazepam',
+                'nizoral': 'Ketoconazole',
+                'nexium': 'Esomeprazole',
+                'nasonex': 'Mometasone',
+                'neosporin': 'Neomycin',
+                'norflex': 'Orphenadrine',
+                'norvasc': 'Amlodipine',
+                'neurontin': 'Gabapentin',
+                'nitro-dur': 'Nitroglycerin',
+                'nix': 'Permethrin',
+                'nolvadex': 'Tamoxifen',
+                'norco': 'Hydrocodone',
+                'nordette': 'Levonorgestrel',
+                'norpace': 'Disopyramide',
+                # Add more mappings as needed
+            }
+            
+            # Map Spanish generic names to English if needed
+            if language == 'es':
+                spanish_to_english = {
+                    'ibuprofeno': 'Ibuprofen',
+                    'paracetamol': 'Paracetamol',
+                    'aspirina': 'Acetylsalicylic Acid',
+                    'metilfenidato': 'Methylphenidate',
+                    'alprazolam': 'Alprazolam',
+                    'clonazepam': 'Clonazepam',
+                    'diazepam': 'Diazepam',
+                    'ketoconazol': 'Ketoconazole',
+                    # add more mappings as needed
+                }
+                if q.lower() in spanish_to_english:
+                    q = spanish_to_english[q.lower()]
+            
+            # Check availability in all stores
+            stores = self.store_service.db_service.get_store_info()
+            availability_info = []
+            medicine_found = False
+            generic_name = None
+            brand_name = None
+            
+            # First, try to find the medicine in the inventory
+            try:
+                # Search by both generic name and brand name
+                rows = self.store_service.db_service.execute_query(
+                    f"SELECT DISTINCT [Generic Name], [Brand Name] FROM dbo.Inventory " +
+                    f"WHERE [Generic Name] = '{q}' OR [Brand Name] = '{q}'"
+                )
+                if rows:
+                    medicine_found = True
+                    generic_name = rows[0].get('Generic Name')
+                    brand_name = rows[0].get('Brand Name')
+                else:
+                    # If not found directly, check brand_to_generic mapping
+                    q_lower = q.lower()
+                    if q_lower in brand_to_generic:
+                        generic_name = brand_to_generic[q_lower]
+                        rows = self.store_service.db_service.execute_query(
+                            f"SELECT DISTINCT [Brand Name] FROM dbo.Inventory WHERE [Generic Name] = '{generic_name}'"
+                        )
+                        if rows:
+                            medicine_found = True
+                            brand_name = rows[0].get('Brand Name')
+            except Exception as e:
+                self.logger.error(f"Error querying inventory: {e}")
+            
+            if not medicine_found:
+                # Try to find similar medicines
+                similar_medicines = []
+                try:
+                    # Search for similar names in both generic and brand names
+                    rows = self.store_service.db_service.execute_query(
+                        f"SELECT DISTINCT [Generic Name], [Brand Name] FROM dbo.Inventory " +
+                        f"WHERE [Generic Name] LIKE '%{q}%' OR [Brand Name] LIKE '%{q}%'"
+                    )
+                    for row in rows:
+                        gen = row.get('Generic Name')
+                        brand = row.get('Brand Name')
+                        if gen and gen not in similar_medicines:
+                            similar_medicines.append(gen)
+                        if brand and brand not in similar_medicines:
+                            similar_medicines.append(brand)
+                except Exception as e:
+                    self.logger.error(f"Error searching similar medicines: {e}")
                 
+                if similar_medicines:
+                    # Store the similar medicines in context for selection
+                    self.current_context = {
+                        'type': 'medicine_selection',
+                        'medicines': similar_medicines
+                    }
+                    
+                    if language == 'es':
+                        response = f"Lo siento, no encontré '{q}'. ¿Quizás quisiste decir uno de estos medicamentos?\n"
+                        for i, med in enumerate(similar_medicines, 1):
+                            response += f"{i}. {med}\n"
+                        response += "\nPor favor, selecciona el número del medicamento que deseas o escribe el nombre correcto."
+                    else:
+                        response = f"Sorry, I couldn't find '{q}'. Did you mean one of these medications?\n"
+                        for i, med in enumerate(similar_medicines, 1):
+                            response += f"{i}. {med}\n"
+                        response += "\nPlease select the number of the medication you want or type the correct name."
+                    
+                    return response
+                
+                # If no similar medicines found
+                if self.current_context and self.current_context.get('orders'):
+                    if language == 'es':
+                        return (f"Lo siento, no tenemos '{q}' disponible. ¿Qué deseas hacer?\n"
+                               "1. Buscar otro medicamento\n"
+                               "2. Finalizar y generar cotización con los pedidos actuales")
+                    else:
+                        return (f"Sorry, we don't have '{q}' available. What would you like to do?\n"
+                               "1. Look for another medication\n"
+                               "2. Checkout and generate quote with current orders")
+                else:
+                    if language == 'es':
+                        return (f"Lo siento, no tenemos '{q}' disponible. ¿Deseas buscar otro medicamento? "
+                               "Por favor, dime el nombre del medicamento que te interesa.")
+                    else:
+                        return (f"Sorry, we don't have '{q}' available. Would you like to look for another medication? "
+                               "Please tell me the name of the medicine you're interested in.")
+            
+            # Check availability in all stores using the found generic name
+            available_stores = []
+            for store in stores:
+                table = store.get('InventoryTableName')
+                try:
+                    rows = self.store_service.db_service.execute_query(
+                        f"SELECT Inventory FROM dbo.[{table}] WHERE [Generic Name] = '{generic_name}'"
+                    )
+                    inventory = rows[0].get('Inventory', 0) if rows else 0
+                    if inventory > 0:
+                        store_info = {
+                            'location': store.get('Location'),
+                            'inventory': inventory
+                        }
+                        available_stores.append(store_info)
+                        availability_info.append(f"- {store.get('Location')}: {inventory} unidades")
+                except Exception:
+                    continue
+            
+            if not availability_info:
+                if language == 'es':
+                    return f"Lo siento, no tenemos '{q}' disponible en ninguna sucursal."
+                else:
+                    return f"Sorry, we don't have '{q}' available in any store."
+            
+            # If medicine is found, start the order flow
+            self.current_context = {
+                'type': 'order_branch',
+                'generic': generic_name,
+                'available_stores': available_stores  # Store the available stores in context
+            }
+            
+            # Display both generic and brand names in the response
+            display_name = f"{brand_name} ({generic_name})" if brand_name and brand_name != generic_name else generic_name
+            
+            # Format response with numbered store options
+            if language == 'es':
+                response = f"Disponibilidad de {display_name} en nuestras sucursales:\n\n"
+                # Add availability info with numbered options
+                for i, store in enumerate(available_stores, 1):
+                    response += f"{i}. {store['location']}: {store['inventory']} unidades\n"
+                response += "\n(Escribe el número de la sucursal para seleccionarla)"
+            else:
+                response = f"Availability of {display_name} in our stores:\n\n"
+                # Add availability info with numbered options
+                for i, store in enumerate(available_stores, 1):
+                    response += f"{i}. {store['location']}: {store['inventory']} units\n"
+                response += "\n(Type the store number to select it)"
+            
+            # Save the numbered options in context for validation
+            self.current_context.update({
+                'store_options': {str(i): store['location'] 
+                                for i, store in enumerate(available_stores, 1)}
+            })
+            
+            return response
+            
         except Exception as e:
-            self.logger.error(f"Error processing medicine query: {e}", exc_info=True)
-            return self._get_error_message(language)
-            
-    def _get_disclaimer_message(self, language: str) -> str:
-        """Get the medical advice disclaimer message."""
-        if language == "es":
-            return (
-                "Lo siento, no puedo proporcionar diagnósticos médicos o consejos sobre síntomas. "
-                "Por favor, consulta a un profesional de la salud para obtener asesoramiento médico. "
-                "Puedo ayudarte con información sobre medicamentos y su disponibilidad en nuestras tiendas."
-            )
-        else:
-            return (
-                "I'm sorry, I cannot provide medical diagnoses or advice about symptoms. "
-                "Please consult a healthcare professional for medical advice. "
-                "I can help you with information about medicines and their availability in our stores."
-            )
-            
-    def _get_not_found_message(self, language: str) -> str:
-        """Get the 'medicine not found' message."""
-        if language == "es":
-            return (
-                "Lo siento, no pude encontrar información sobre ese medicamento. "
-                "Por favor, verifica el nombre y vuelve a intentarlo."
-            )
-        else:
-            return (
-                "I'm sorry, I couldn't find information about that medicine. "
-                "Please check the name and try again."
-            )
-            
-    def _get_error_message(self, language: str) -> str:
-        """Get the error message."""
-        if language == "es":
-            return "Lo siento, tuve un problema al buscar la información del medicamento."
-        else:
-            return "I'm sorry, I had trouble finding the medicine information."
+            self.logger.error(f"Error processing medicine query: {e}")
+            if language == "es":
+                return "Lo siento, tuve un problema al buscar información sobre ese medicamento. Por favor, verifica el nombre e intenta nuevamente."
+            else:
+                return "I'm sorry, I had trouble finding information about that medicine. Please check the name and try again."
             
     def process_store_query(self, query: str, language: str) -> str:
         """Process queries related to store information."""

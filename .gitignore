@@ -1,44 +1,37 @@
-# Python
+# Python virtual environments
+.venv/
+venv/
+env/
+.conda/
+
+# Python cache files
 __pycache__/
 *.py[cod]
-*$py.class
-*.so
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-*.egg-info/
-.installed.cfg
-*.egg
+*.class
+.ipynb_checkpoints/
 
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-
-# Log files
+# Logs
 *.log
+logs/
 
-# PDF files
+# Generated PDFs and files
 *.pdf
+*.json
 
-# JSON order files
-orders_*.json
-
-# Other
-.DS_Store
-Thumbs.db
-Medicines/chroma.sqlite3
-medicines_vectordb/chroma.sqlite3
+# Database files
+*.db
 *.sqlite3
+
+# Environment variables
+.env
+
+# Vector database
+medicines_vectordb/
+chroma_db_medicines/
+
+# Gradio cache
+.gradio/
+
+# IDE files
+.vscode/
+.idea/

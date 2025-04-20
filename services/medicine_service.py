@@ -3,14 +3,13 @@ Medicine service for FarmaBot - Handles medicine-related operations.
 """
 
 import logging
-from typing import Optional, List, Dict, Any, Union
+from typing import Optional, List, Dict, Any
 from langchain_openai import OpenAIEmbeddings
 from langchain_chroma import Chroma
 from langchain.docstore.document import Document
 from langchain_core.messages import SystemMessage, HumanMessage
 import difflib
 import re
-import random
 
 from .database_service import DatabaseService
 
@@ -26,10 +25,6 @@ class MedicineService:
         self.exact_threshold = 0.9  # For very close matches
         self.high_threshold = 0.7   # For likely matches
         self.low_threshold = 0.5    # For possible matches
-        
-        # Context tracking
-        self.current_medicine_context = None
-        self.available_stores = []
         
         # Initialize components
         self.setup_vectorstore()
@@ -84,54 +79,40 @@ class MedicineService:
             # Fetch generic and all brand columns
             all_medicine_rows = self.db_service.execute_query("""
                 SELECT
-                    m.medicine_id,
-                    m.generic_name,
-                    m.brand_name1,
-                    m.brand_name2,
-                    m.brand_name3,
-                    m.brand_name4,
-                    m.brand_name5,
-                    m.brand_name6
-                FROM Medicines m
+                    m.MedicineID AS MedicineID,
+                    m.[Generic Name] AS GenericName,
+                    m.[Brand Name 1] AS BrandName1,
+                    m.[Brand Name 2] AS BrandName2,
+                    m.[Brand Name 3] AS BrandName3,
+                    m.[Brand Name 4] AS BrandName4,
+                    m.[Brand Name 5] AS BrandName5,
+                    m.[Brand Name 6] AS BrandName6
+                FROM dbo.Medicines m
             """)
-            
-            if not all_medicine_rows:
-                self.logger.error("Database error fetching all medicines.")
-                return []
             
             all_medicines = []
             # Consolidate brand names into list
             for row in all_medicine_rows:
-                medicine = {
-                    'medicine_id': row[0],
-                    'generic_name': row[1],
-                    'brand_name1': row[2],
-                    'brand_name2': row[3],
-                    'brand_name3': row[4],
-                    'brand_name4': row[5],
-                    'brand_name5': row[6],
-                    'brand_name6': row[7]
-                }
-                all_medicines.append(medicine)
+                brands = []
+                for i in range(1, 7):
+                    bn = row.get(f'BrandName{i}')
+                    if bn:
+                        brands.append(bn)
+                row['BrandNames'] = brands
+                all_medicines.append(row)
             
             # Find similar names
             similar_medicines = []
             for medicine in all_medicines:
-                generic_name = medicine.get('generic_name', '')
-                brand_names = [
-                    medicine.get('brand_name1'),
-                    medicine.get('brand_name2'),
-                    medicine.get('brand_name3'),
-                    medicine.get('brand_name4'),
-                    medicine.get('brand_name5'),
-                    medicine.get('brand_name6')
-                ]
-                brand_names = [bn for bn in brand_names if bn]  # Remove None values
+                generic_name = medicine.get('GenericName', '')
+                # Multiple brands
+                brand_list = medicine.get('BrandNames', [])
                 
                 # Calculate similarity scores
                 generic_similarity = self._calculate_similarity(query, generic_name)
+                # Check similarity across all brands
                 brand_similarity = max(
-                    (self._calculate_similarity(query, bn) for bn in brand_names),
+                    (self._calculate_similarity(query, bn) for bn in brand_list),
                     default=0.0
                 )
                 
@@ -140,19 +121,19 @@ class MedicineService:
                 
                 # If similarity is above the low threshold, add the medicine
                 if similarity >= self.low_threshold:
-                    medicine['similarity'] = similarity
-                    medicine['match_type'] = 'exact' if similarity >= self.exact_threshold else \
+                    medicine['Similarity'] = similarity
+                    medicine['MatchType'] = 'exact' if similarity >= self.exact_threshold else \
                                          'high' if similarity >= self.high_threshold else 'low'
                     similar_medicines.append(medicine)
             
             # Sort by similarity score and match type
-            similar_medicines.sort(key=lambda x: (x['match_type'] != 'exact', 
-                                                x['match_type'] != 'high', 
-                                                -x['similarity']))
+            similar_medicines.sort(key=lambda x: (x['MatchType'] != 'exact', 
+                                                x['MatchType'] != 'high', 
+                                                -x['Similarity']))
             return similar_medicines[:5]  # Return top 5 matches
             
         except Exception as e:
-            self.logger.error(f"Error finding similar medicines: {e}", exc_info=True)
+            self.logger.error(f"Error finding similar medicines: {e}")
             return []
             
     def _format_selection_menu(self, medicines: List[Dict[str, Any]], language: str) -> str:
@@ -160,22 +141,11 @@ class MedicineService:
         if language == "es":
             menu = "¿A cuál de estos medicamentos te refieres?\n\n"
             for i, med in enumerate(medicines, 1):
-                # Get all brand names
-                brand_names = [name for name in [
-                    med.get('brand_name1'), 
-                    med.get('brand_name2'),
-                    med.get('brand_name3'),
-                    med.get('brand_name4'),
-                    med.get('brand_name5'),
-                    med.get('brand_name6')
-                ] if name]
-                
-                menu += f"{i}. {med.get('generic_name')}"
-                if brand_names:
-                    menu += f" ({', '.join(brand_names)})"
-                
+                menu += f"{i}. {med.get('GenericName')}"
+                if med.get('BrandNames'):
+                    menu += f" ({', '.join(med.get('BrandNames'))})"
                 # Add confidence level
-                match_type = med.get('match_type', '')
+                match_type = med.get('MatchType', '')
                 if match_type == 'exact':
                     menu += " [Coincidencia exacta]"
                 elif match_type == 'high':
@@ -187,22 +157,11 @@ class MedicineService:
         else:
             menu = "Which of these medicines are you referring to?\n\n"
             for i, med in enumerate(medicines, 1):
-                # Get all brand names
-                brand_names = [name for name in [
-                    med.get('brand_name1'), 
-                    med.get('brand_name2'),
-                    med.get('brand_name3'),
-                    med.get('brand_name4'),
-                    med.get('brand_name5'),
-                    med.get('brand_name6')
-                ] if name]
-                
-                menu += f"{i}. {med.get('generic_name')}"
-                if brand_names:
-                    menu += f" ({', '.join(brand_names)})"
-                
+                menu += f"{i}. {med.get('GenericName')}"
+                if med.get('BrandNames'):
+                    menu += f" ({', '.join(med.get('BrandNames'))})"
                 # Add confidence level
-                match_type = med.get('match_type', '')
+                match_type = med.get('MatchType', '')
                 if match_type == 'exact':
                     menu += " [Exact match]"
                 elif match_type == 'high':
@@ -214,708 +173,267 @@ class MedicineService:
             
         return menu
         
-    def _generate_and_add_price(self, medicine_dict: Dict) -> Dict:
-        """Retrieves the stored price from the database or generates a new one if not found."""
-        # Try to get price from the database first
-        medicine_id = medicine_dict.get('medicine_id')
-        if medicine_id:
-            price_query = "SELECT price FROM Medicines WHERE medicine_id = ?"
-            result = self.db_service.execute_query(price_query, (medicine_id,))
-            
-            if result and result[0][0] is not None:
-                # Format to 2 decimal places
-                formatted_price = f"{result[0][0]:.2f}"
-                medicine_dict['Price'] = formatted_price
-                self.logger.info(f"Retrieved stored price ${formatted_price} for MedicineID {medicine_id}")
-                return medicine_dict
-        
-        # Fallback to generating a price if not found in DB
-        price = random.uniform(0.50, 4.00)
-        # Format to 2 decimal places
-        formatted_price = f"{price:.2f}"
-        medicine_dict['Price'] = formatted_price
-        self.logger.info(f"Generated price ${formatted_price} for MedicineID {medicine_dict.get('medicine_id')}")
-        return medicine_dict
-
-    def search_medicines(self, query: str, language: str) -> str:
-        """Search for medicines and return formatted results."""
+    def search_medicines(self, query: str, language: str = "es") -> str:
+        """Search for medicines using both brand and generic names with fuzzy matching."""
         try:
-            # Find similar medicines
+            self.logger.info(f"Starting medicine search for query: '{query}'")
+            # First, try to find exact matches
+            self.logger.info("Attempting exact match search...")
+            medicines = self.get_medicine_details(medicine_name=query)
+            
+            if medicines:
+                self.logger.info(f"Exact match found: {medicines[0].get('GenericName')}")
+                return self._format_medicine_response(medicines[0], language)
+            
+            self.logger.info("No exact match found. Attempting fuzzy match search...")
+            # If no exact match, look for similar names
             similar_medicines = self._find_similar_medicines(query)
             
-            if not similar_medicines:
+            if similar_medicines:
+                self.logger.info(f"Fuzzy matches found ({len(similar_medicines)}). Returning selection menu.")
+                # Save results for context
+                self.last_search_results = similar_medicines
+                # Ask the user to choose one
+                return self._format_selection_menu(similar_medicines, language)
+            
+            self.logger.info("No fuzzy matches found. Attempting vector search...")
+            # If no similar matches, try vector similarity search
+            docs = self.retriever.invoke(query)
+            if not docs:
+                self.logger.warning(f"No matches found via vector search for query: '{query}'")
                 return self._get_not_found_message(language)
+                
+            self.logger.info("Vector search returned results. Processing best match...")
+            # Get the most relevant medicine
+            context = docs[0].page_content
+            medicine_name = context.split('\n')[0].split(': ')[1]
             
-            # If we have an exact match (similarity >= 0.9), show inventory directly
-            exact_matches = [m for m in similar_medicines if m.get('similarity', 0) >= self.exact_threshold]
-            if exact_matches:
-                medicine = exact_matches[0]
-                # Get inventory for all stores
-                inventory = self.db_service.execute_query("""
-                    SELECT s.name, i.quantity
-                    FROM Inventory i 
-                    JOIN Stores s ON i.store_id = s.store_id 
-                    WHERE i.medicine_id = ?
-                    ORDER BY s.name
-                """, (medicine['medicine_id'],))
-                
-                # Get price for display
-                price_query = "SELECT price FROM Medicines WHERE medicine_id = ?"
-                price_result = self.db_service.execute_query(price_query, (medicine['medicine_id'],))
-                
-                price = None
-                if price_result and price_result[0][0] is not None:
-                    price = f"{price_result[0][0]:.2f}"
-                    medicine['Price'] = price
-                
-                # Format response based on language
-                if language == "es":
-                    response = f"Encontré {medicine['generic_name']}"
-                    if medicine['brand_name1']:
-                        response += f" ({medicine['brand_name1']})"
-                    if price:
-                        response += f"\nPrecio: ${price}"
-                    response += "\n\nDisponible en las siguientes farmacias:\n\n"
-                    for idx, (store_name, quantity) in enumerate(inventory, 1):
-                        response += f"{idx}. {store_name}: {quantity} unidades\n"
-                    response += "\nPor favor, escriba el número de la farmacia donde desea comprar el medicamento."
-                else:
-                    response = f"I found {medicine['generic_name']}"
-                    if medicine['brand_name1']:
-                        response += f" ({medicine['brand_name1']})"
-                    if price:
-                        response += f"\nPrice: ${price}"
-                    response += "\n\nAvailable at the following pharmacies:\n\n"
-                    for idx, (store_name, quantity) in enumerate(inventory, 1):
-                        response += f"{idx}. {store_name}: {quantity} units\n"
-                    response += "\nPlease type the number of the pharmacy where you would like to purchase the medicine."
-                
-                # Store current medicine context for store selection
-                self.current_medicine_context = medicine
-                self.available_stores = [store[0] for store in inventory]
-                return response
+            self.logger.info(f"Best vector match suggests: '{medicine_name}'. Looking up details...")
+            # Try to find the medicine in the database
+            medicines = self.get_medicine_details(medicine_name=medicine_name)
+            if medicines:
+                self.logger.info(f"Details found for vector match: {medicines[0].get('GenericName')}")
+                return self._format_medicine_response(medicines[0], language)
             
-            # If no exact match, show selection menu
-            self.last_search_results = similar_medicines
-            return self._format_selection_menu(similar_medicines, language)
+            self.logger.warning(f"Could not find DB details for vector match suggestion: '{medicine_name}'")
+            return self._get_not_found_message(language)
             
         except Exception as e:
-            self.logger.error(f"Error searching for medicine '{query}': {e}", exc_info=True)
+            self.logger.error(f"Error during medicine search for query '{query}': {e}", exc_info=True)
             return self._get_error_message(language)
             
-    def handle_selection(self, selection: str, language: str = "es") -> str:
-        """Handle user selection from a list, check aggregate stock."""
-        self.logger.info(f"Handling selection: {selection} from last results count: {len(self.last_search_results)}")
-        
-        if not self.last_search_results:
-            self.logger.warning("handle_selection called without prior search results.")
-            return self._get_error_message(language)
-            
+    def handle_selection(self, selection: str, similar_medicines: List[Dict[str, Any]], language: str) -> str:
+        """Handle user selection from similar medicines menu."""
         try:
-            index = int(selection) - 1
-            if 0 <= index < len(self.last_search_results):
-                selected_medicine = self.last_search_results[index]
-                selected_medicine_generic_name = selected_medicine.get('generic_name')
-                # Get brand names from the selected dict as well
-                selected_brand_names = [selected_medicine.get(f'brand_name{i}') for i in range(1, 7) if selected_medicine.get(f'brand_name{i}')]
-                self.logger.info(f"User selected medicine: {selected_medicine_generic_name}")
-                
-                # Generate price for the selected medicine
-                selected_medicine = self._generate_and_add_price(selected_medicine)
-                
-                # Check aggregate stock using the *name* and *brands*
-                aggregate_stock = self._check_store_stock(generic_name=selected_medicine_generic_name, brand_names=selected_brand_names)
-                
-                if isinstance(aggregate_stock, int) and aggregate_stock > 0:
-                    self.logger.info(f"Found aggregate stock ({aggregate_stock}) for selected medicine.")
-                    # Update context - no store selection needed
-                    self.current_medicine_context = {'type': 'medicine_selected_stock', 'medicine': selected_medicine}
-                    # Use simplified format response
-                    return self._format_store_availability_response(selected_medicine, aggregate_stock, language)
-                else:
-                     self.logger.info("No aggregate stock found for selected medicine.")
-                     # Update context - info provided, no stock
-                     self.current_medicine_context = {'type': 'medicine_info_no_stock', 'medicine': selected_medicine}
-                     # Use general info format (will state no availability)
-                     return self._format_medicine_response(selected_medicine, language)
-            else:
-                self.logger.warning(f"Invalid selection index: {index}")
-                # Re-present the menu
-                return self._format_selection_menu(self.last_search_results, language)
-        except ValueError:
-            self.logger.warning(f"Invalid selection format: {selection}")
-            # Re-present the menu on bad input
-            return self._format_selection_menu(self.last_search_results, language)
-        except Exception as e:
-            self.logger.error(f"Error handling selection: {e}", exc_info=True)
-            return self._get_error_message(language)
-            
-    def _check_store_stock(self, generic_name: str, brand_names: List[str]) -> Union[int, str]:
-        """Check stock by medicine ID in the 'Inventory' table."""
-        try:
-            # Get the medicine_id from Medicines table first
-            medicine_ids = []
-            
-            # Search by generic name
-            if generic_name:
-                query = """
-                    SELECT medicine_id
-                    FROM Medicines
-                    WHERE LOWER(generic_name) LIKE ?
-                """
-                result = self.db_service.execute_query(query, (f"%{generic_name.lower().strip()}%",))
-                if result:
-                    medicine_ids.extend([row[0] for row in result])
-            
-            # Search by brand names
-            if brand_names:
-                for brand in brand_names:
-                    if not brand:
-                        continue
-                    query = """
-                        SELECT medicine_id
-                        FROM Medicines
-                        WHERE 
-                            LOWER(brand_name1) LIKE ? OR
-                            LOWER(brand_name2) LIKE ? OR
-                            LOWER(brand_name3) LIKE ? OR
-                            LOWER(brand_name4) LIKE ? OR
-                            LOWER(brand_name5) LIKE ? OR
-                            LOWER(brand_name6) LIKE ?
-                    """
-                    brand_param = f"%{brand.lower().strip()}%"
-                    result = self.db_service.execute_query(query, (brand_param,) * 6)
-                    if result:
-                        medicine_ids.extend([row[0] for row in result])
-            
-            # Remove duplicates
-            medicine_ids = list(set(medicine_ids))
-            
-            if not medicine_ids:
-                self.logger.warning(f"No medicine IDs found for {generic_name} or any brand names")
-                return "Not available"
-            
-            self.logger.info(f"Found medicine IDs: {medicine_ids}")
-            
-            # Now check inventory for these medicine IDs
-            total_stock = 0
-            for medicine_id in medicine_ids:
-                query = """
-                    SELECT SUM(quantity) as total
-                    FROM Inventory
-                    WHERE medicine_id = ?
-                """
-                result = self.db_service.execute_query(query, (medicine_id,))
-                if result and result[0][0] is not None:
-                    total_stock += result[0][0]
-            
-            if total_stock > 0:
-                self.logger.info(f"Total stock for {generic_name}: {total_stock}")
-                return total_stock
-            else:
-                self.logger.info(f"No stock available for {generic_name}")
-                return "Not available"
-            
-        except Exception as e:
-            self.logger.error(f"Error checking stock: {e}", exc_info=True)
-            return "Error checking stock"
-
-    def _format_medicine_response(self, medicine: Dict, language: str = "es") -> str:
-        """Format the response for a found medicine, including price and total availability."""
-        medicine_id = medicine.get('medicine_id') # Still useful for potential future lookups
-        generic_name = medicine.get('generic_name') or medicine.get('generic_name', 'N/A')
-
-        # Get other details (brands, description, prescription) from the medicine dict
-        brand_names_list = [name for name in (
-            medicine.get('brand_name1'), 
-            medicine.get('brand_name2'),
-            medicine.get('brand_name3'), 
-            medicine.get('brand_name4'),
-            medicine.get('brand_name5'), 
-            medicine.get('brand_name6')
-        ) if name]
-        
-        # Get aggregate stock using the *name* and *brands*
-        total_stock = self._check_store_stock(generic_name=generic_name, brand_names=brand_names_list) 
-
-        if 'Description' not in medicine or 'RequiresPrescription' not in medicine:
-            # Fetch if needed - _get_medicine_details still uses ID primarily
-            if medicine_id:
-                full_details = self._get_medicine_details(medicine_id=medicine_id)
-                if full_details:
-                    medicine.update(full_details)
-            else: # Fallback if ID somehow missing
-                full_details = self._get_medicine_details(medicine_name=generic_name)
-                if full_details:
-                    medicine.update(full_details)
-
-        description = medicine.get('Description', '')
-        prescription = medicine.get('RequiresPrescription', False)
-        
-        # Get price from database directly
-        price = None
-        if medicine_id:
+            # Try to convert selection to integer
             try:
-                price_query = "SELECT price FROM Medicines WHERE medicine_id = ?"
-                price_result = self.db_service.execute_query(price_query, (medicine_id,))
-                if price_result and price_result[0][0] is not None:
-                    price = f"{price_result[0][0]:.2f}"
-            except Exception as e:
-                self.logger.error(f"Error fetching price: {e}")
-        
-        # Use cached price as fallback
-        if not price:
-            price = medicine.get('Price')
-
-        # Format response including the aggregate stock
-        if language == "es":
-            response = f"**Medicamento Encontrado:**\n" \
-                       f"- **Nombre Genérico:** {generic_name}\n"
-            if brand_names_list:
-                response += f"- **Nombres de Marca:** {', '.join(brand_names_list)}\n"
-            if description:
-                 response += f"- **Descripción:** {description}\n"
-            response += f"- **Requiere Receta:** {'Sí' if prescription else 'No'}\n"
-            if price:
-                 response += f"- **Precio:** ${price}\n"
-            # Add aggregate stock info
-            if isinstance(total_stock, int) and total_stock > 0:
-                response += f"- **Disponibilidad Total:** {total_stock} unidades en todas las tiendas.\n"
-            else: # Handles 0, "Not available", or "Error checking stock"
-                 response += f"- **Disponibilidad Total:** No disponible actualmente.\n"
-        else: # English
-            response = f"**Medicine Found:**\n" \
-                       f"- **Generic Name:** {generic_name}\n"
-            if brand_names_list:
-                response += f"- **Brand Names:** {', '.join(brand_names_list)}\n"
-            if description:
-                 response += f"- **Description:** {description}\n"
-            response += f"- **Requires Prescription:** {'Yes' if prescription else 'No'}\n"
-            if price:
-                 response += f"- **Price:** ${price}\n"
-            # Add aggregate stock info
-            if isinstance(total_stock, int) and total_stock > 0:
-                 response += f"- **Total Availability:** {total_stock} units across all stores.\n"
-            else: # Handles 0, "Not available", or "Error checking stock"
-                 response += f"- **Total Availability:** Currently not available.\n"
-
-        return response.strip()
-        
-    def _format_store_availability_response(self, medicine: Dict, store_stock: int, language: str = "es") -> str:
-        """Format response for medicine with aggregate stock (no store list)."""
-        generic_name = medicine.get('generic_name') or medicine.get('generic_name', 'N/A')
-        # Corrected brand name generation
-        brand_names_list = [name for name in (
-            medicine.get('brand_name1'), 
-            medicine.get('brand_name2'),
-            medicine.get('brand_name3'), 
-            medicine.get('brand_name4'),
-            medicine.get('brand_name5'), 
-            medicine.get('brand_name6')
-        ) if name]
-        brand_names = f" ({', '.join(brand_names_list)})" if brand_names_list else ""
-
-        # Get price from database directly
-        price = None
-        medicine_id = medicine.get('medicine_id')
-        if medicine_id:
-            price_query = "SELECT price FROM Medicines WHERE medicine_id = ?"
-            price_result = self.db_service.execute_query(price_query, (medicine_id,))
-            if price_result and price_result[0][0] is not None:
-                price = f"{price_result[0][0]:.2f}"
-        
-        # Use cached price as fallback
-        if not price:
-            price = medicine.get('Price')
-
-        # Check if stock is available (int > 0)
-        if not isinstance(store_stock, int) or store_stock <= 0:
-            # This medicine shouldn't have reached here if stock <= 0, but handle defensively
-            if language == "es":
-                return f"Lo siento, {generic_name}{brand_names} no está disponible actualmente." 
-            else:
-                return f"Sorry, {generic_name}{brand_names} is currently not available."
-
-        # Format response showing total stock
-        if language == "es":
-            response = f"Encontré **{generic_name}{brand_names}**. "
-            if price:
-                 response += f"Precio: ${price}. "
-            response += f"Hay una disponibilidad total de **{store_stock} unidades** en todas las tiendas.\n"
-            response += "¿Necesitas información sobre otro medicamento?" # Changed follow-up
-        else: # English
-            response = f"Found **{generic_name}{brand_names}**. "
-            if price:
-                 response += f"Price: ${price}. "
-            response += f"There is a total availability of **{store_stock} units** across all stores.\n"
-            response += "Do you need information about another medicine?" # Changed follow-up
-
-        return response.strip()
-        
-    def _get_not_found_message(self, language: str) -> str:
-        """Return a message indicating the medicine was not found."""
-        if language == "es":
-            return "Lo siento, no pude encontrar información sobre ese medicamento. ¿Podrías verificar el nombre e intentarlo de nuevo?"
-        else:
-            return "I'm sorry, I couldn't find information about that medicine. Could you please check the name and try again?"
-
-    def _get_error_message(self, language: str) -> str:
-        """Return a generic error message."""
-        if language == "es":
-            return "Lo siento, ocurrió un error al procesar tu solicitud. Por favor, intenta de nuevo más tarde."
-        else:
-            return "I'm sorry, an error occurred while processing your request. Please try again later."
-
-    def _get_medicine_details(self, medicine_id: int = None, medicine_name: str = None) -> dict:
-        """Get detailed information about a medicine using named parameters."""
-        if not medicine_id and not medicine_name:
-            self.logger.warning("Attempted to get medicine details without ID or name.")
-            return {}
-
-        try:
-            params = {}
-            if medicine_id:
-                query = "SELECT * FROM Medicines WHERE MedicineID = :med_id"
-                params = {"med_id": medicine_id}
-            elif medicine_name:
-                 query = """
-                    SELECT * FROM Medicines 
-                    WHERE LOWER([Generic Name]) = :name 
-                       OR LOWER([Brand Name 1]) = :name OR LOWER([Brand Name 2]) = :name OR LOWER([Brand Name 3]) = :name
-                       OR LOWER([Brand Name 4]) = :name OR LOWER([Brand Name 5]) = :name OR LOWER([Brand Name 6]) = :name
-                    LIMIT 1 
-                 """
-                 params = {"name": medicine_name.lower().strip()}
-            else:
-                return {} # Should not happen due to initial check
+                choice = int(selection)
+                if 1 <= choice <= len(similar_medicines):
+                    medicine = similar_medicines[choice - 1]
+                    return self._format_medicine_response(medicine, language)
+            except ValueError:
+                pass
                 
-            result = self.db_service.execute_query(query, params, fetch_one=True)
-
-            if result:
-                self.logger.info(f"Retrieved details for medicine ID: {result.get('MedicineID')}")
-                return result # Already a dict
+            # If selection is invalid, return error message
+            if language == "es":
+                return "Selección inválida. Por favor, elige un número de la lista."
             else:
-                 # Fallback to LIKE search if exact match failed for name
-                 if medicine_name and not medicine_id:
-                     query_like = """
-                        SELECT * FROM Medicines 
-                        WHERE LOWER([Generic Name]) LIKE :like_name 
-                           OR LOWER([Brand Name 1]) LIKE :like_name OR LOWER([Brand Name 2]) LIKE :like_name OR LOWER([Brand Name 3]) LIKE :like_name
-                           OR LOWER([Brand Name 4]) LIKE :like_name OR LOWER([Brand Name 5]) LIKE :like_name OR LOWER([Brand Name 6]) LIKE :like_name
-                        LIMIT 1
-                    """
-                     params_like = {"like_name": f"%{medicine_name.lower().strip()}%"}
-                     result_like = self.db_service.execute_query(query_like, params_like, fetch_one=True)
-                     if result_like:
-                         self.logger.info(f"Retrieved details via LIKE search for medicine ID: {result_like.get('MedicineID')}")
-                         return result_like
-
-            self.logger.warning(f"No details found for medicine ID {medicine_id} or name '{medicine_name}'")
-            return {}
+                return "Invalid selection. Please choose a number from the list."
+                
+        except Exception as e:
+            self.logger.error(f"Error handling selection: {e}")
+            return self._get_error_message(language)
+            
+    def _check_store_stock(self, generic_name: str, brand_names: List[str], inventory_table: str) -> Dict[str, Any]:
+        """Check if a medicine (generic and brand names) is available in a specific store using its inventory table."""
+        try:
+            # Query the store's specific inventory table for generic and brand names
+            # Prepare brand names list for SQL IN clause
+            brands_list = [bn for bn in brand_names if bn]
+            brands_clause = ''
+            if brands_list:
+                in_list = ', '.join(f"'{bn}'" for bn in brands_list)
+                brands_clause = f" OR [Brand Name] IN ({in_list})"
+            query = f"""
+                SELECT
+                    [Generic Name] AS GenericName,
+                    [Brand Name] AS BrandName,
+                    Inventory
+                FROM dbo.[{inventory_table}]
+                WHERE [Generic Name] = '{generic_name}'{brands_clause}
+            """
+            rows = self.db_service.execute_query(query)
+            # Determine availability
+            generic_available = any(r.get('GenericName') == generic_name and r.get('Inventory', 0) > 0 for r in rows)
+            brand_availability = {bn: any(r.get('BrandName') == bn and r.get('Inventory', 0) > 0 for r in rows) for bn in brands_list}
+            return {'generic_available': generic_available, 'brand_availability': brand_availability}
+        except Exception as e:
+            self.logger.error(f"Error checking store stock for store '{inventory_table}': {e}")
+            return {'generic_available': False, 'brand_availability': {}}
+            
+    def _format_medicine_response(self, medicine: Dict[str, Any], language: str) -> str:
+        """Format the medicine information response."""
+        try:
+            # Get store availability
+            stores = self.db_service.get_store_info()
+            availability_info = []
+            # Prepare generic and brand names
+            generic_name = medicine.get('GenericName')
+            brand_names = medicine.get('BrandNames', [])
+            for store in stores:
+                inventory_table = store.get('InventoryTableName')
+                store_location = store.get('Location')
+                stock_info = self._check_store_stock(generic_name, brand_names, inventory_table)
+                
+                # Format availability information
+                if language == "es":
+                    store_availability = f"\n{store_location}:\n"
+                    if stock_info['generic_available']:
+                        store_availability += "  - Genérico: Disponible\n"
+                    else:
+                        store_availability += "  - Genérico: No disponible\n"
+                        
+                    if stock_info['brand_availability']:
+                        store_availability += "  - Marcas disponibles:\n"
+                        for brand, available in stock_info['brand_availability'].items():
+                            status = "Disponible" if available else "No disponible"
+                            store_availability += f"    * {brand}: {status}\n"
+                    else:
+                        store_availability += "  - No hay marcas disponibles\n"
+                else:
+                    store_availability = f"\n{store_location}:\n"
+                    if stock_info['generic_available']:
+                        store_availability += "  - Generic: Available\n"
+                    else:
+                        store_availability += "  - Generic: Not available\n"
+                        
+                    if stock_info['brand_availability']:
+                        store_availability += "  - Available brands:\n"
+                        for brand, available in stock_info['brand_availability'].items():
+                            status = "Available" if available else "Not available"
+                            store_availability += f"    * {brand}: {status}\n"
+                    else:
+                        store_availability += "  - No brands available\n"
+                
+                availability_info.append(store_availability)
+            
+            # Format response based on language
+            if language == "es":
+                # Spanish response without leading spaces or code block formatting
+                lines = [
+                    "Información del medicamento:",
+                    "",
+                    f"Nombre genérico: {medicine.get('GenericName', 'No disponible')}",
+                    f"Nombre comercial: {', '.join(medicine.get('BrandNames', ['No disponible']))}",
+                    f"Requiere receta: {'Sí' if medicine.get('RequiresPrescription') else 'No'}",
+                    "",
+                    "Disponibilidad en tiendas:",
+                ]
+                # Add store availability lines
+                lines.extend(line.strip() for line in availability_info)
+                response = "\n".join(lines)
+            else:
+                response = f"""
+                Medicine Information:
+                
+                Generic Name: {medicine.get('GenericName', 'Not available')}
+                Brand Name: {', '.join(medicine.get('BrandNames', ['Not available']))}
+                Requires Prescription: {'Yes' if medicine.get('RequiresPrescription') else 'No'}
+                
+                Store Availability:
+                {''.join(availability_info)}
+                """
+            
+            return response.strip()
             
         except Exception as e:
-            self.logger.error(f"Error getting medicine details: {e}", exc_info=True)
-            return {}
-
+            self.logger.error(f"Error formatting medicine response: {e}")
+            return self._get_error_message(language)
+            
+    def _get_not_found_message(self, language: str) -> str:
+        """Get the 'medicine not found' message in the appropriate language."""
+        return (
+            "Lo siento, no pude encontrar información sobre ese medicamento. "
+            "Por favor, verifica el nombre y vuelve a intentarlo."
+            if language == "es" else
+            "I'm sorry, I couldn't find information about that medicine. "
+            "Please check the name and try again."
+        )
+        
+    def _get_error_message(self, language: str) -> str:
+        """Get the error message in the appropriate language."""
+        return (
+            "Lo siento, tuve un problema al buscar la información del medicamento."
+            if language == "es" else
+            "I'm sorry, I had trouble finding the medicine information."
+        )
+            
+    def get_medicine_details(self, medicine_id: Optional[int] = None, 
+                           medicine_name: Optional[str] = None) -> List[Dict[str, Any]]:
+        """Get detailed information about a specific medicine."""
+        try:
+            query = """
+            SELECT
+                m.MedicineID AS MedicineID,
+                m.[Generic Name] AS GenericName,
+                m.[Brand Name 1] AS BrandName1,
+                m.[Brand Name 2] AS BrandName2,
+                m.[Brand Name 3] AS BrandName3,
+                m.[Brand Name 4] AS BrandName4,
+                m.[Brand Name 5] AS BrandName5,
+                m.[Brand Name 6] AS BrandName6,
+                m.Prescription AS RequiresPrescription,
+                m.[Side Effects (Common)] AS CommonSideEffects,
+                m.[Side Effects (Rare)] AS RareSideEffects
+            FROM dbo.Medicines m
+            """
+            
+            if medicine_id:
+                query += f" WHERE m.MedicineID = {medicine_id}"
+            elif medicine_name:
+                query += f" WHERE m.[Generic Name] LIKE '%{medicine_name}%' OR m.[Brand Name 1] LIKE '%{medicine_name}%'"
+                
+            rows = self.db_service.execute_query(query)
+            # Combine multiple brand columns into a list
+            for row in rows:
+                brand_list = []
+                for i in range(1, 7):
+                    bn = row.get(f'BrandName{i}')
+                    if bn and isinstance(bn, str) and bn.strip():
+                        brand_list.append(bn.strip())
+                row['BrandNames'] = brand_list
+            return rows
+        except Exception as e:
+            self.logger.error(f"Error getting medicine details: {e}")
+            raise
+            
     def check_prescription_status(self, medicine_name: str) -> str:
         """Check if a medicine requires a prescription."""
-        details = self._get_medicine_details(medicine_name=medicine_name)
-        if details:
-            requires_prescription = details.get('RequiresPrescription', False)
-            generic_name = details.get('Generic Name', medicine_name)
-            if requires_prescription:
-                return f"{generic_name} requires a prescription."
-            else:
-                return f"{generic_name} does not require a prescription."
-        else:
-            return f"Sorry, I couldn't find information about {medicine_name}."
-
+        try:
+            medicines = self.get_medicine_details(medicine_name=medicine_name)
+            if not medicines:
+                return "Medicine not found."
+                
+            medicine = medicines[0]
+            return f"Prescription required: {medicine.get('RequiresPrescription', 'Unknown')}"
+            
+        except Exception as e:
+            self.logger.error(f"Error checking prescription status: {e}")
+            return "Error checking prescription status."
+            
     def get_side_effects(self, medicine_name: str) -> str:
-        """Retrieve common side effects for a medicine (placeholder)."""
-        # In a real application, this would query a database or external API.
-        # For now, return a placeholder based on the medicine name.
-        details = self._get_medicine_details(medicine_name=medicine_name)
-        if details:
-            generic_name = details.get('Generic Name', medicine_name)
-            # Example placeholder logic
-            if "ibuprofen" in generic_name.lower():
-                return "Common side effects of Ibuprofen may include upset stomach, nausea, vomiting, headache, diarrhea, constipation, dizziness, or drowsiness."
-            elif "paracetamol" in generic_name.lower() or "acetaminophen" in generic_name.lower():
-                return "Acetaminophen (Paracetamol) is generally well-tolerated, but side effects can include nausea or rash. Severe liver damage can occur with overdose."
-            else:
-                return f"Common side effects for {generic_name} can vary. Please consult a pharmacist or doctor for specific information."
-        else:
-             return f"Sorry, I couldn't find information about {medicine_name}."
-
-    def find_medicine(self, name: str) -> List[Dict]:
-        """Find medicine by name using Python filtering."""
+        """Get side effects information for a medicine."""
         try:
-            self.logger.info(f"Executing find_medicine (Python Filter) for: '{name}'")
-            
-            # Get all medicines from database
-            query = """
-                SELECT 
-                    m.medicine_id,
-                    m.generic_name,
-                    m.brand_name1,
-                    m.brand_name2,
-                    m.brand_name3,
-                    m.brand_name4,
-                    m.brand_name5,
-                    m.brand_name6,
-                    m.description,
-                    m.side_effects,
-                    m.requires_prescription
-                FROM Medicines m
-            """
-            
-            all_medicines = self.db_service.execute_query(query)
-            if not all_medicines:
-                self.logger.error("Database error fetching all medicines.")
-                return []
-            
-            # Convert to list of dictionaries
-            medicines = []
-            for row in all_medicines:
-                medicine = {
-                    'medicine_id': row[0],
-                    'generic_name': row[1],
-                    'brand_name1': row[2],
-                    'brand_name2': row[3],
-                    'brand_name3': row[4],
-                    'brand_name4': row[5],
-                    'brand_name5': row[6],
-                    'brand_name6': row[7],
-                    'description': row[8],
-                    'side_effects': row[9],
-                    'requires_prescription': row[10]
-                }
-                medicines.append(medicine)
-            
-            # Common brand name mappings
-            brand_mappings = {
-                "tylenol": "acetaminophen",
-                "panadol": "acetaminophen",
-                "advil": "ibuprofen",
-                "motrin": "ibuprofen",
-                "benadryl": "diphenhydramine",
-                "allegra": "fexofenadine",
-                "claritin": "loratadine",
-                "zyrtec": "cetirizine"
-            }
-            
-            # Normalize search term
-            search_term = name.lower().strip()
-            if search_term in brand_mappings:
-                search_term = brand_mappings[search_term]
-                self.logger.info(f"Mapped brand name '{name}' to generic name '{search_term}'")
-            
-            # Find exact matches first
-            exact_matches = []
-            like_matches = []
-            
-            for med in medicines:
-                generic_name = med['generic_name'].lower() if med['generic_name'] else ''
-                brand_names = [
-                    med['brand_name1'].lower() if med['brand_name1'] else '',
-                    med['brand_name2'].lower() if med['brand_name2'] else '',
-                    med['brand_name3'].lower() if med['brand_name3'] else '',
-                    med['brand_name4'].lower() if med['brand_name4'] else '',
-                    med['brand_name5'].lower() if med['brand_name5'] else '',
-                    med['brand_name6'].lower() if med['brand_name6'] else ''
-                ]
-                brand_names = [bn for bn in brand_names if bn]  # Remove empty strings
+            medicines = self.get_medicine_details(medicine_name=medicine_name)
+            if not medicines:
+                return "Medicine not found."
                 
-                # Check for exact matches
-                if search_term == generic_name:
-                    med['match_type'] = 'exact_generic'
-                    exact_matches.append(med)
-                elif any(search_term == bn for bn in brand_names):
-                    med['match_type'] = 'exact_brand'
-                    exact_matches.append(med)
-                # Check for LIKE matches
-                elif search_term in generic_name:
-                    med['match_type'] = 'like_generic'
-                    like_matches.append(med)
-                elif any(search_term in bn for bn in brand_names):
-                    med['match_type'] = 'like_brand'
-                    like_matches.append(med)
-                
-            # If we have exact matches, return those
-            if exact_matches:
-                self.logger.info(f"Found {len(exact_matches)} exact matches")
-                return exact_matches
+            medicine = medicines[0]
+            common_effects = medicine.get('CommonSideEffects', 'No common side effects listed.')
+            rare_effects = medicine.get('RareSideEffects', 'No rare side effects listed.')
             
-            # If we have only one LIKE match, treat it as a good match
-            if len(like_matches) == 1:
-                like_matches[0]['match_type'] = 'single_like_result'
-                self.logger.info("Found single LIKE match")
-                return like_matches
-            
-            # If we have multiple LIKE matches, return all of them
-            if like_matches:
-                self.logger.info(f"Found {len(like_matches)} LIKE matches")
-                return like_matches
-            
-            # No matches found
-            self.logger.info(f"No medicine found for query: {name}")
-            return []
+            return f"Common side effects: {common_effects}\nRare side effects: {rare_effects}"
             
         except Exception as e:
-            self.logger.error(f"Error during Python filtering find_medicine for '{name}': {e}", exc_info=True)
-            return []
-
-    def handle_store_selection(self, selection: str, language: str = "es") -> str:
-        """Handle user selection of a store, then ask for quantity."""
-        try:
-            index = int(selection) - 1
-            if 0 <= index < len(self.available_stores):
-                selected_store = self.available_stores[index]
-                medicine_name = self.current_medicine_context.get('generic_name', 'the medicine')
-                
-                # Store the selected store index for later use
-                self.current_medicine_context['selected_store_index'] = index
-                
-                if language == "es":
-                    return f"Ha seleccionado la farmacia: {selected_store}\n\n¿Cuántas unidades de {medicine_name} desea comprar?"
-                else:
-                    return f"You've selected the pharmacy: {selected_store}\n\nHow many units of {medicine_name} would you like to purchase?"
-            else:
-                if language == "es":
-                    return "Número de farmacia inválido. Por favor, seleccione un número de la lista."
-                else:
-                    return "Invalid pharmacy number. Please select a number from the list."
-        except ValueError:
-            if language == "es":
-                return "Por favor, ingrese un número válido."
-            else:
-                return "Please enter a valid number."
-        except Exception as e:
-            self.logger.error(f"Error handling store selection: {e}", exc_info=True)
-            return self._get_error_message(language)
-            
-    def handle_quantity_selection(self, quantity: str, language: str = "es") -> str:
-        """Handle user selection of quantity, then ask to add to order."""
-        try:
-            quantity_num = int(quantity)
-            if quantity_num <= 0:
-                if language == "es":
-                    return "Por favor, ingrese una cantidad válida mayor que cero."
-                else:
-                    return "Please enter a valid quantity greater than zero."
-                    
-            medicine_name = self.current_medicine_context.get('generic_name', 'the medicine')
-            
-            # Get the price of the medicine
-            medicine_id = self.current_medicine_context.get('medicine_id')
-            price_per_unit = 0.0
-            
-            if medicine_id:
-                price_query = "SELECT price FROM Medicines WHERE medicine_id = ?"
-                result = self.db_service.execute_query(price_query, (medicine_id,))
-                
-                if result and result[0][0] is not None:
-                    price_per_unit = float(result[0][0])
-            
-            # Check if the quantity is available in the selected store
-            if not self.available_stores:
-                if language == "es":
-                    return "Error: No hay farmacias seleccionadas. Por favor, vuelva a buscar el medicamento."
-                else:
-                    return "Error: No pharmacies selected. Please search for the medicine again."
-                
-            store_index = self.current_medicine_context.get('selected_store_index', 0)
-            selected_store = self.available_stores[store_index]
-            
-            # Get the available quantity in the selected store
-            available_query = """
-                SELECT i.quantity
-                FROM Inventory i
-                JOIN Stores s ON i.store_id = s.store_id
-                WHERE i.medicine_id = ? AND s.name = ?
-            """
-            result = self.db_service.execute_query(available_query, (medicine_id, selected_store))
-            
-            if not result:
-                if language == "es":
-                    return "Error al verificar el inventario. Por favor, intente nuevamente."
-                else:
-                    return "Error checking inventory. Please try again."
-                    
-            available_quantity = result[0][0]
-            
-            if quantity_num > available_quantity:
-                if language == "es":
-                    return f"Lo sentimos, solo hay {available_quantity} unidades disponibles en {selected_store}. Por favor, ingrese una cantidad menor o igual a {available_quantity}."
-                else:
-                    return f"Sorry, there are only {available_quantity} units available at {selected_store}. Please enter a quantity less than or equal to {available_quantity}."
-            
-            # Calculate total price for this purchase
-            total_price = price_per_unit * quantity_num
-            
-            # Store selected store information for cart
-            self.current_medicine_context['selected_store'] = selected_store
-            self.current_medicine_context['selected_quantity'] = quantity_num
-            
-            if language == "es":
-                return f"Se han agregado {quantity_num} unidades de {medicine_name} a su carrito.\n" + \
-                       f"Farmacia: {selected_store}\n" + \
-                       f"Precio unitario: ${price_per_unit:.2f}\n" + \
-                       f"Total para este medicamento: ${total_price:.2f}\n\n" + \
-                       f"¿Desea agregar otro medicamento o finalizar la compra?\n\n" + \
-                       f"1. Agregar otro medicamento\n2. Finalizar compra"
-            else:
-                return f"Added {quantity_num} units of {medicine_name} to your cart.\n" + \
-                       f"Pharmacy: {selected_store}\n" + \
-                       f"Unit price: ${price_per_unit:.2f}\n" + \
-                       f"Total for this medicine: ${total_price:.2f}\n\n" + \
-                       f"Would you like to add another medicine or checkout?\n\n" + \
-                       f"1. Add another medicine\n2. Checkout"
-        except ValueError:
-            if language == "es":
-                return "Por favor, ingrese una cantidad válida en números."
-            else:
-                return "Please enter a valid quantity as a number."
-        except Exception as e:
-            self.logger.error(f"Error handling quantity selection: {e}", exc_info=True)
-            return self._get_error_message(language)
-
-    def check_medicine_availability(self, medicine_id: int) -> Dict[str, Any]:
-        """Check medicine availability across all stores."""
-        try:
-            # Get aggregate inventory information
-            aggregate_info = self.db_service.get_aggregate_inventory(medicine_id=medicine_id)
-            
-            if not aggregate_info:
-                self.logger.info(f"No aggregate inventory found for medicine_id={medicine_id}")
-                return {
-                    'available': False,
-                    'total_quantity': 0,
-                    'stores': []
-                }
-            
-            # Get individual store quantities
-            store_quantities = self.db_service.execute_query(
-                """
-                SELECT s.name, i.quantity
-                FROM Inventory i
-                JOIN Stores s ON i.store_id = s.store_id
-                WHERE i.medicine_id = :medicine_id
-                AND i.quantity > 0
-                """,
-                {'medicine_id': medicine_id}
-            )
-            
-            return {
-                'available': aggregate_info['total_quantity'] > 0,
-                'total_quantity': aggregate_info['total_quantity'],
-                'stores': [{'name': row['name'], 'quantity': row['quantity']} for row in store_quantities]
-            }
-            
-        except Exception as e:
-            self.logger.error(f"Error checking medicine availability: {e}", exc_info=True)
-            return {
-                'available': False,
-                'total_quantity': 0,
-                'stores': []
-            } 
+            self.logger.error(f"Error getting side effects: {e}")
+            return "Error getting side effects information." 
