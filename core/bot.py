@@ -78,7 +78,7 @@ class FarmaBot:
         """Set up the vector store for medicine information."""
         try:
             self.vectorstore = Chroma(
-                persist_directory="medicines_vectordb",
+                persist_directory="medicines_vectordb_lite",  # Using lightweight version
                 embedding_function=self.embeddings
             )
             self.retriever = self.vectorstore.as_retriever()

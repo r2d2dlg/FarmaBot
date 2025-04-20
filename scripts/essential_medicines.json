@@ -1,0 +1,25 @@
+{
+  "essential_medicines": [
+    "Acetaminophen",
+    "Ibuprofen",
+    "Aspirin",
+    "Amoxicillin",
+    "Lisinopril",
+    "Atorvastatin",
+    "Metformin",
+    "Omeprazole",
+    "Levothyroxine",
+    "Alprazolam",
+    "Methotrexate",
+    "Prednisone",
+    "Fluoxetine",
+    "Sertraline",
+    "Loratadine",
+    "Cetirizine",
+    "Insulin",
+    "Albuterol",
+    "Simvastatin",
+    "Hydrochlorothiazide"
+  ],
+  "description": "These medicines are included in the optimized vector database."
+}
