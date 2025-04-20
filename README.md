@@ -24,7 +24,7 @@ FarmaBot is a bilingual (English/Spanish) chatbot designed to assist customers w
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/farmabot.git
+git clone https://github.com/r2d2dlg/farmabot.git
 cd farmabot
 ```
 
