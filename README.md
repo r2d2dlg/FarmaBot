@@ -7,15 +7,17 @@ FarmaBot is a bilingual (English/Spanish) chatbot designed to assist customers w
 - Bilingual support (English/Spanish)
 - Medicine information lookup
 - Store location and hours information
+- PDF quote generation
 - Natural language processing
 - Modern, user-friendly interface
 - Secure database integration
+- Support for both OpenAI and Google Gemini models
 
 ## Prerequisites
 
 - Python 3.9 or higher
 - SQL Server with the ChatbotFarmacia database
-- OpenAI API key
+- API Key (OpenAI or Google depending on model choice)
 - ODBC Driver 17 for SQL Server
 
 ## Installation
@@ -26,23 +28,33 @@ git clone https://github.com/yourusername/farmabot.git
 cd farmabot
 ```
 
-2. Create and activate a virtual environment:
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+2. Setup the environment (Windows):
 ```
+# Using the provided setup script
+.\setup.ps1
 
-3. Install dependencies:
-```bash
+# Or manually:
+python -m venv venv
+.\venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-4. Create a `.env` file in the project root with your configuration:
-```env
+3. Configure your environment:
+   - Copy `.env.template` to `.env`
+   - Edit `.env` and add your API keys and configure the model
+
+## Model Configuration
+
+FarmaBot supports both OpenAI and Google Gemini models. In the `.env` file:
+
+```
+# For OpenAI models
+MODEL=gpt-4-turbo  # or gpt-3.5-turbo
 OPENAI_API_KEY=your_openai_api_key
-SERVER_NAME=your_server_name
-DATABASE_NAME=ChatbotFarmacia
-DRIVER=ODBC Driver 17 for SQL Server
+
+# For Google Gemini models
+MODEL=gemini-1.5-pro  # or gemini-1.0-pro
+GOOGLE_API_KEY=your_google_api_key
 ```
 
 ## Database Setup
@@ -50,7 +62,11 @@ DRIVER=ODBC Driver 17 for SQL Server
 1. Ensure SQL Server is running
 2. Create the ChatbotFarmacia database
 3. Import the schema from `ChatbotFarmacia.sql`
-4. Populate the database with medicine and store information
+4. Configure the connection string in `.env`
+5. Test your connection:
+```bash
+python scripts/test_db.py
+```
 
 ## Running the Bot
 
@@ -79,8 +95,11 @@ farmabot/
 ├── interface/         # User interface
 │   ├── __init__.py
 │   └── gradio_interface.py
+├── scripts/           # Utility scripts
 ├── main.py           # Entry point
 ├── requirements.txt  # Dependencies
+├── setup.ps1         # Setup script
+├── .env.template     # Environment template
 └── README.md        # Documentation
 ```
 
@@ -98,6 +117,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Acknowledgments
 
-- OpenAI for the language models
+- OpenAI and Google for the language models
 - Gradio for the UI framework
 - LangChain for the AI framework 

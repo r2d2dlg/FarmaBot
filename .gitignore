@@ -16,7 +16,7 @@ logs/
 
 # Generated PDFs and files
 *.pdf
-*.json
+orders_*.json
 
 # Database files
 *.db
@@ -24,6 +24,7 @@ logs/
 
 # Environment variables
 .env
+.env.local
 
 # Vector database
 medicines_vectordb/
@@ -35,3 +36,14 @@ chroma_db_medicines/
 # IDE files
 .vscode/
 .idea/
+
+# Jupyter notebooks
+*.ipynb
+
+# Mac OS
+.DS_Store
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
